@@ -1,0 +1,113 @@
+//=========================//
+//A: GENERATE RAINFALL MAPS//
+//=========================//
+//KNP Shapefile obtained from protectedplanet.net & named "kutai"//
+//1. IMPORT AND ADD KNP BOUNDARY TO MAP//
+Map.addLayer(kutai, {}, 'Kutai shp')
+
+//2. CREATE A PALETTE FOR MAPPING//
+var rainfall_palette = 'ff0000, ffffff, 0000ff';
+
+//3. MAP A CERTAIN YEAR (e.g., 2021)//
+var rainfall2021 = ee.ImageCollection('UCSB-CHG/CHIRPS/PENTAD')
+.select('precipitation')
+.filterDate('2021-01-01', '2021-12-31') //Specify 2 time periods: 1) Jan 1 to Dec 31 & 2) Sept 1 to Oct 31
+.sum(); // sum aggregation parameter gives TOTAL rainfall for entire 2015 made into a single image
+Map.addLayer(rainfall2021.clip(kutai), {'min': 0, 'max': 700, 'palette': rainfall_palette}, "Rainfall 2020", false);
+Map.centerObject(kutai, 10);
+
+//4. EXPORT MAP (.tif) TO GDRIVE//
+Export.image.toDrive({
+  image: rainfall2021.clip(kutai), 
+  description: '2021 rainfall in KNP', 
+  region: kutai,
+  scale: 30
+});
+//REPEAT FOR EACH YEAR OF INTEREST IN DATASET (1997-2021)//
+
+
+//=============================//
+//B: ANALYZE DROUGHT CONDITIONS//
+//=============================//
+//SCRIPT CO-OPTED FROM OPEN ACCESS GEE TUTORIAL (https://courses.spatialthoughts.com/end-to-end-gee.html) DEVELOPED BY UJAVAL GHANDI//
+//1. LOAD CHIRPS DATA//
+var chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/PENTAD")
+
+//2. CREATE A LIST OF 30 YEARS (1987-2016) FOR A LONG PERIOD AVERAGE (LPA, DEFINED AS 30+ YEARS)//
+var lpaYears = ee.List.sequence(1987, 2016)
+var months = ee.List.sequence(1,12)
+
+//3. MAP OVER YEARS SPECIFIED (lpaYears) USING A FUNCTION THAT ITERATES OVER EACH YEAR AND ANOTHER FUNCTION THAT ITERATES OVER EACH MONTH//
+var monthlyImages = lpaYears.map(function(year){ 
+  return months.map(function(month){
+    var filtered = chirps
+			.filter(ee.Filter.calendarRange(year, year, 'year')) //
+	    .filter(ee.Filter.calendarRange(month, month, 'month')) //calls all Pentad images for each month of each year in lpaYears
+    var monthlyTotal = filtered.sum() //sums total rainfall for each month
+    return monthlyTotal.set({'month':month, 'year':year}) //returns monthly total as image for each year in lpaYears
+})}).flatten(); //use flatten() to return list of years+months into a listed collection (year as x, mm/mo as y)
+print(monthlyImages)
+
+//4. PLACE COMPUTED IMAGES (1 image per month for entire long-period duration) INTO AN IMAGE COLLECTION//
+var monthlyCol = ee.ImageCollection.fromImages(monthlyImages) 
+
+//5. COMPUTE MONTHLY AVERAGE RAINFALL OVER 30 YEARS//
+var longTermMeans = months.map(function(month){ 
+  var filtered = monthlyCol.filter(ee.Filter.eq('month', month)) //filters out all images from the same month across all years
+  var monthlyMean = filtered.mean() //.mean() is the shortform function for ee.Reducer.mean()
+  return monthlyMean.set('month', month)}); //
+print(longTermMeans);
+
+//6. CHART AVERAGE MONTHLY RAINFALL OVER KNP//
+var chart = ui.Chart.image.series({
+  imageCollection: longTermMeans,
+  region: kutai,
+  reducer: ee.Reducer.mean(), //take the average of the monthly means over the 30 year time period
+  xProperty: 'month'
+}).setOptions({
+  linewidth: 1,
+  pointSize: 3,
+  title: 'Long-term (30-year) Average Monthly Rainfall over KNP',
+  vAxis: {title: 'Rainfall (mm)'},
+  hAxis: {title: 'Month', gridlines: {count: 12}}});
+print(chart);
+
+//7. PLACE COMPUTED IMAGES (monthly average rainfall for LPA) INTO AN IMAGE COLLECTION
+var monthlyRainfall = ee.ImageCollection.fromImages(longTermMeans)
+
+//8. NOW TAKE DATA FROM A SINGLE YEAR OF INTEREST (e.g., 2015)//
+var filtered = chirps
+  .filter(ee.Filter.date('2015-01-01', '2015-12-31'))
+  .filter(ee.Filter.bounds(kutai));
+  
+//9. ...AND COMPUTE MONTHLY TOTAL RAINFALL FOR THE YEAR OF INTEREST (in list form)//
+var monthlyTotals = months.map(function(month) {
+  return filtered.filter(ee.Filter.calendarRange(month, month, 'month'))
+    .sum()
+    .set('month', month)});
+  
+//10. CREATE AN IMAGE COLLECTION FROM MONTHLY IMAGES IN VARIABLE monthlyTotals//
+var observedRainfall = ee.ImageCollection.fromImages(monthlyTotals)
+
+//11. COMPUTE DEVIATION OF RAINFALL IN YEAR OF INTEREST FROM THE LPA (in %)//
+var deviation = months.map(function(month) { //map function over months list
+  var longTermMean = ee.Image(monthlyRainfall.filter(ee.Filter.eq('month', month)).first()) //result will be 1 image for each month
+  var monthlyObserved = ee.Image(observedRainfall.filter(ee.Filter.eq('month', month)).first())
+  var monthlyDeviation = ((monthlyObserved.subtract(longTermMean)).divide(longTermMean)).multiply(100)
+    return monthlyDeviation.set('month', month)});
+    
+//12. GENERATE CHART OF RAINFALL DEVIATION IN YEAR OF INTEREST FROM LPA//
+var chart = ui.Chart.image.series({
+  imageCollection: deviation,
+  region: kutai,
+	reducer: ee.Reducer.mean(),
+  scale: 10000,
+  xProperty: 'month'
+}).setOptions({
+  linewidth: 1,
+  pointSize: 3,
+  title: 'Percent deviation of monthly rainfall in 2015 from 30-year average',
+  vAxis: {title: '% deviation from LTA'},
+  hAxis: {title: 'Month', gridlines: {count: 12}}
+})
+print(chart);
