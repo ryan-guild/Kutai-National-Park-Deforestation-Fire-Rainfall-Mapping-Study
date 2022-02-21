@@ -1,0 +1,61 @@
+//KNP Shapefile obtained from protectedplanet.net & named "kutai"//
+//1. IMPORT AND ADD KNP BOUNDARY TO MAP//
+Map.addLayer(kutai, {}, 'Kutai shp')
+
+//2. CALL AN IMAGE COLLECTION & CLIP TO KNP//
+var KNP = ee.Image("UMD/hansen/global_forest_change_2020_v1_8")
+.clip(kutai);
+
+//3. SELECT BANDS FROM IMAGE COLLECTION//
+var treeCover = KNP.select(['treecover2000']);
+var lossImage = KNP.select(['loss']);
+var gainImage = KNP.select(['gain']);
+var lossYear = KNP.select(['lossyear']);
+
+//4. CALCULATE TOTAL # PIXELS OF FOREST LOSS BETWEEN 2000-2020 USING .reduceRegion FUNCTION//
+//USING .reduceRegion FUNCTION WHICH REDUCES ALL PIXELS IN ROI TO A STATISTIC//
+var lossAreaImage = lossImage.multiply(ee.Image.pixelArea()).divide(1e6); //Divide by 1e6 to convert from m2 to km2
+var lossByYear = lossAreaImage.addBands(lossYear).reduceRegion({
+  reducer: ee.Reducer.sum().group({
+    groupField: 1 //groupField = index of the input in the selectors array that contains the codes by which to group (i.e. loss, no loss)
+  }),
+    geometry: kutai,
+    scale: 30,
+    maxPixels: 1e14
+});
+print(lossByYear); //yearly forest loss printed out in a nested list called groups
+
+//5. CHART FOREST LOSS IN KNP FROM 2000-2020//
+//BY MAKING THE OUTPUT FROM THE PREVIOUS STEP A DICTIONARY WITH YEAR AS THE KEY AND LOSS AREA AS THE VALUE//
+var statsFormatted = ee.List(lossByYear.get('groups'))
+  .map(function(el) {
+    var d = ee.Dictionary(el);
+    return [ee.Number(d.get('group')).format("20%02d"), d.get('sum')]; //format() converts 0-20 to 2000-2020
+  });
+var statsDictionary = ee.Dictionary(statsFormatted.flatten());
+print(statsDictionary);
+
+//6. DISPLAY statsDictionary IN CHART//
+//USING THE ui.Chart.array.values() FUNCTION WHICH TAKES A LIST OF INPUT VALUES AND A LIST OF LABELS FOR THE X AXIS//
+var chart = ui.Chart.array.values({
+  array: statsDictionary.values(), //loss area as values
+  axis: 0,
+  xLabels: statsDictionary.keys()
+}).setChartType('ColumnChart')
+  .setOptions({
+    title: 'Yearly Forest Loss in KNP',
+    hAxis: {title: 'Year', format: '####'},
+    vAxis: {title: 'Area (square kilometers)'},
+    legend: { position: "none" },
+    lineWidth: 1,
+    pointSize: 3
+  });
+print(chart);
+
+//7. EXPORT THE LOSS IMAGE (see tasks tab)//
+Export.image.toDrive({
+image: lossYear,
+description: 'Loss year',
+scale: 30,
+region: kutai
+});
