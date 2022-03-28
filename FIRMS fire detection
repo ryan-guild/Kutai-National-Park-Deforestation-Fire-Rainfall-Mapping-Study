@@ -13,7 +13,7 @@
   Map.addLayer(Fires2002, firesVis, 'Fires2002');
  
 
-//3. GRAPH DATE OF YEAR (doy) OF FIRE PIXELS BETWEEN 2002-2021
+//3. GRAPH DAY OF YEAR (doy) OF FIRE PIXELS BETWEEN 2002-2021
 //MUST BREAK DATES INTO 4 YR CHUNKS TO PROCESS LARGE IMAGE COLLECTION WITHOUT ERROR (or else user memory exceeded)
   var FIRMS = ee.ImageCollection('FIRMS')
     .select('T21').filterDate('2002-01-01','2005-12-31');
