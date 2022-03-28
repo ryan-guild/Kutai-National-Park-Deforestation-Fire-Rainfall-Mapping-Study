@@ -1,0 +1,39 @@
+//1. CREATE FIRE VISUALIZATION PARAMETER FOR FIRMS DATASET
+  var firesVis = {
+    min: 300, //min brightness temperature
+    max: 400, //max brightness temperature
+    palette: ['red', 'orange', 'yellow'] //yellow shows high intensity of burning, red shows the less intense burning
+  };
+  
+
+//2. GENERATING ANNUAL MAPS OF DETECTED FIRE PIXELS WITHIN KNP
+//Example: Fires in 2002
+  var Fires2002 = ee.ImageCollection('FIRMS').filter(
+    ee.Filter.date('2002-01-01', '2002-12-31')).select('T21');
+  Map.addLayer(Fires2002, firesVis, 'Fires2002');
+ 
+
+//3. GRAPH DATE OF YEAR (doy) OF FIRE PIXELS BETWEEN 2002-2021
+//MUST BREAK DATES INTO 4 YR CHUNKS TO PROCESS LARGE IMAGE COLLECTION WITHOUT ERROR (or else user memory exceeded)
+  var FIRMS = ee.ImageCollection('FIRMS')
+    .select('T21').filterDate('2002-01-01','2005-12-31');
+
+// TIME SERIES CHART
+  var options = {
+    title: 'MODIS Thermal Anomalies over KNP',
+    fontSize: 12,
+    hAxis: {title: 'Date of Year'},
+    vAxis: {title: 'Number of fire pixels (1km2)', viewWindow: {min: 0}}};
+
+  var chart = ui.Chart.image.doySeriesByYear(FIRMS, 'T21', kutai, ee.Reducer.count(), 1000).setOptions(options);
+  print(chart)
+  
+ 
+//4. EXPORT MAPS TO DRIVE IN GEOTIFF FORMAT
+//Example: Fires in 2002
+ Export.image.toDrive({
+   image: Fires2002.mosaic().clip(kutai),
+   description: 'Firesiin2002',
+   scale: 30,
+   region: kutai
+});
