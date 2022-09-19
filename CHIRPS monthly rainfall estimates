@@ -33,4 +33,4 @@ var chart = ui.Chart.image.series({
 })
 print(chart);
 
-//5. Download monthly rainfall estimates over KNP for each year of interest (.csv)
+//5. Download average monthly rainfall estimates over KNP for each year of interest (.csv)
