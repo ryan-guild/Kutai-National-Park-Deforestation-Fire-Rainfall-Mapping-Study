@@ -2,60 +2,67 @@
 //1. IMPORT AND ADD KNP BOUNDARY TO MAP//
 Map.addLayer(kutai, {}, 'Kutai shp')
 
-//2. CALL AN IMAGE COLLECTION & CLIP TO KNP//
-var KNP = ee.Image("UMD/hansen/global_forest_change_2020_v1_8")
-.clip(kutai);
+//2. CALK THE DATASET
+var dataset = ee.Image('UMD/hansen/global_forest_change_2021_v1_9');
+Map.centerObject(knp)
 
-//3. SELECT BANDS FROM IMAGE COLLECTION//
-var treeCover = KNP.select(['treecover2000']);
-var lossImage = KNP.select(['loss']);
-var gainImage = KNP.select(['gain']);
-var lossYear = KNP.select(['lossyear']);
+//2. Display tree cover in year 2000
+var treeCoverVisParam = {
+  bands: ['treecover2000'],
+  min: 0,
+  max: 100,
+  palette: ['black', 'green']
+};
+Map.addLayer(dataset.clip(knp), treeCoverVisParam, 'tree cover');
 
-//4. CALCULATE TOTAL # PIXELS OF FOREST LOSS BETWEEN 2000-2020 USING .reduceRegion FUNCTION//
-//USING .reduceRegion FUNCTION WHICH REDUCES ALL PIXELS IN ROI TO A STATISTIC//
-var lossAreaImage = lossImage.multiply(ee.Image.pixelArea()).divide(1e6); //Divide by 1e6 to convert from m2 to km2
-var lossByYear = lossAreaImage.addBands(lossYear).reduceRegion({
-  reducer: ee.Reducer.sum().group({
-    groupField: 1 //groupField = index of the input in the selectors array that contains the codes by which to group (i.e. loss, no loss)
-  }),
-    geometry: kutai,
-    scale: 30,
-    maxPixels: 1e14
-});
-print(lossByYear); //yearly forest loss printed out in a nested list called groups
+//3. DISPLAY LOSS PER YEAR (2001-2021)
+var treeLossVisParam = {
+  bands: ['lossyear'],
+  min: 1,
+  max: 21,
+  palette: ['0D0887', '5B02A3', '9A179B', 'CB4678', 'EB7852', 'FBB32F', '80ced6']
+};
+Map.addLayer(dataset.clip(knp), treeLossVisParam, 'tree loss year');
 
-//5. CHART FOREST LOSS IN KNP FROM 2000-2020//
-//BY MAKING THE OUTPUT FROM THE PREVIOUS STEP A DICTIONARY WITH YEAR AS THE KEY AND LOSS AREA AS THE VALUE//
-var statsFormatted = ee.List(lossByYear.get('groups'))
-  .map(function(el) {
-    var d = ee.Dictionary(el);
-    return [ee.Number(d.get('group')).format("20%02d"), d.get('sum')]; //format() converts 0-20 to 2000-2020
-  });
-var statsDictionary = ee.Dictionary(statsFormatted.flatten());
+//4. CALCULATE LOSS PER YEAR IN A DICTIONARY
+var lossYear = dataset.select(['lossyear']);
+var statsFormatted = lossYear.reduceRegion({
+  reducer: ee.Reducer.frequencyHistogram(),
+  geometry: knp,
+  scale: 30,
+  crs: 'EPSG:4326'
+}).get('lossyear');
+var statsDictionary = ee.Dictionary(statsFormatted);
 print(statsDictionary);
 
-//6. DISPLAY statsDictionary IN CHART//
-//USING THE ui.Chart.array.values() FUNCTION WHICH TAKES A LIST OF INPUT VALUES AND A LIST OF LABELS FOR THE X AXIS//
-var chart = ui.Chart.array.values({
-  array: statsDictionary.values(), //loss area as values
-  axis: 0,
-  xLabels: statsDictionary.keys()
-}).setChartType('ColumnChart')
-  .setOptions({
-    title: 'Yearly Forest Loss in KNP',
-    hAxis: {title: 'Year', format: '####'},
-    vAxis: {title: 'Area (square kilometers)'},
-    legend: { position: "none" },
-    lineWidth: 1,
-    pointSize: 3
-  });
+//5. SPECIFY X AND Y LABELS IN DICTIONARY
+var years = statsDictionary.keys()
+                          .map(function(year){
+                            return ee.Number.parse(year)});
+
+var loss = statsDictionary.values(statsDictionary.keys())
+                          .map(function(numberLossPixels){
+                            return ee.Number(numberLossPixels).multiply(900).divide(1e6)});
+
+//6. CHART THE DICTIONARY
+//Using ui.Chart.array.values() which takes a list of input values and a list of labels for the x axis
+var chart = ui.Chart.array.values(loss, 0, years)
+            .setChartType('ColumnChart')
+            .setOptions({
+              title: 'Yearly Forest Loss in KNP',
+              hAxis: {title: 'Year', format: '####'},
+              vAxis: {title: 'Loss area (sq kilometers)'},
+              legend: {position: 'none'},
+              lineWidth: 1,
+              pointSize: 3
+             });
 print(chart);
 
-//7. EXPORT THE LOSS IMAGE (see tasks tab)//
+//7. EXPORT LOSS IMAGE
 Export.image.toDrive({
-image: lossYear,
-description: 'Loss year',
-scale: 30,
-region: kutai
-});
+  image: lossYear.clip(knp),
+  description: 'Loss by year',
+  scale: 30,
+  crs: 'EPSG:4326',
+  region: knp
+})
