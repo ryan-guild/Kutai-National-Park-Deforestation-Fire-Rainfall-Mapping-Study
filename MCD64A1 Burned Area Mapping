@@ -1,0 +1,14 @@
+//2. CALL THE MCD64A1 DATASET
+var dataset = ee.ImageCollection('MODIS/006/MCD64A1')
+
+//3. SPECIFY A TIME FRAME TO VISUALIZE BURNED AREA (e.g., 2014)
+var fires2014 = dataset.filter(ee.Filter.date('2014-01-01', '2014-12-31'))
+                   .select('BurnDate');
+
+//4. EXPORT ANNUAL BA IMAGES FROM CONSOLE
+Export.image.toDrive({
+   image: fires2014.mosaic().clip(KNP),
+   description: 'burnedArea2014',
+   region: KNP,
+   scale: 500,
+   maxPixels: 1e10});
