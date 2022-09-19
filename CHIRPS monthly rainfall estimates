@@ -1,0 +1,36 @@
+//-------------------------------------------------------------------
+//Calculate monthly rainfall over KNP for each year between 2002-2021
+//-------------------------------------------------------------------
+
+//1. Load CHIRPS Pentad data
+var chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/PENTAD")
+var months = ee.List.sequence(1,12)
+
+//2. Call a single year of interest
+var filtered = chirps
+  .filter(ee.Filter.date('2015-01-01', '2015-12-31'))
+  .filter(ee.Filter.bounds(kutai))
+  
+//3. Compute monthly total rainfall for the year of interest (in list form)
+var monthlyTotals = months.map(function(month) {
+  return filtered.filter(ee.Filter.calendarRange(month, month, 'month'))
+    .sum()
+    .set('month', month)});
+
+//4. Generate chart of monthly rainfall for each year of interest
+var chart = ui.Chart.image.series({
+  imageCollection: monthlyTotals,
+  region: kutai.geometry(),
+  reducer: ee.Reducer.mean(),
+  scale: 5566,
+  xProperty: 'month'
+}).setOptions({
+  linewidth: 1,
+  pointSize: 3,
+  title: 'Average monthly rainfall over KNP in 2015',
+  vAxis: {title: 'Average rainfall (mm)'},
+  hAxis: {title: 'Month', gridlines: {count: 12}}
+})
+print(chart);
+
+//5. Download monthly rainfall estimates over KNP for each year of interest (.csv)
