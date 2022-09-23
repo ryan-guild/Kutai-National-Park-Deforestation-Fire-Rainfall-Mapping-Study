@@ -30,7 +30,7 @@ var statsFormatted = lossYear.reduceRegion({
   reducer: ee.Reducer.frequencyHistogram(),
   geometry: knp,
   scale: 30,
-  crs: 'EPSG:4326'
+  crs: 'EPSG:32650'
 }).get('lossyear');
 var statsDictionary = ee.Dictionary(statsFormatted);
 print(statsDictionary);
